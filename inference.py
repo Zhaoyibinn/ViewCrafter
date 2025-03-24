@@ -1,5 +1,7 @@
 from viewcrafter import ViewCrafter
 import os
+
+# os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 from configs.infer_config import get_parser
 from utils.pvd_utils import *
 from datetime import datetime

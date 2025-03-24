@@ -1,0 +1,61 @@
+{
+    // 使用 IntelliSense 了解相关属性。 
+    // 悬停以查看现有属性的描述。
+    // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "train",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/inference.py",
+            "pythonPath":"/root/miniconda3/envs/viewcrafter/bin/python",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": ["--image_dir", "test/images/tango.png",
+            "--out_dir", "./output",
+            "--traj_txt","test/trajs/loop2.txt",
+            "--mode","single_view_txt",
+            "--center_scale" ,"1.",
+            "--elevation=5",
+            "--seed","123",
+            "--d_theta","-30", 
+            "--d_phi","45",
+            "--d_r","-.2",
+            "--d_x","50",
+            "--d_y","25",
+            "--ckpt_path" ,"./checkpoints/model.ckpt",
+            "--config","configs/inference_pvd_1024.yaml",
+            "--ddim_steps","50",
+            "--video_length","25",
+            "--device","cuda:0",
+            // "--height","576","--width","1024",
+            "--height","800","--width","800",
+            "--model_path","./checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth"
+                ]
+        },
+        {
+            "name": "train_sparse",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/inference.py",
+            "pythonPath":"/root/miniconda3/envs/viewcrafter/bin/python",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": ["--image_dir", "test/images_sparse/S4",
+            "--out_dir", "./output",
+            "--mode","sparse_view_interp",
+            "--bg_trd" ,"0.2",
+            "--seed","123",
+            "--ckpt_path" ,"./checkpoints/model_sparse.ckpt",
+            "--config","configs/inference_pvd_1024.yaml",
+            "--ddim_steps","50",
+            "--video_length","25",
+            "--device","cuda:0",
+            "--height","576","--width","1024",
+            // "--height","800","--width","800",
+            "--model_path","./checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth"
+                ]
+        }
+    ]
+}
