@@ -170,6 +170,43 @@ class BasePCOptimizer (nn.Module):
             assert poses.shape[-1] in (8, 13)
             pose.data[-1] = np.log(float(scale))
         return pose
+    
+    def _set_pose_fromcolmap(self, poses, idx, colmap_poses, T=None, scale=None, force=False):
+        # all poses == cam-to-world
+        pose = poses[idx]
+
+        q_x, q_y, q_z,q_w,t_x,t_y,t_z = colmap_poses[idx]
+
+        R = torch.eye(4)
+        R_3 = torch.tensor([
+            [1 - 2 * q_y ** 2 - 2 * q_z ** 2, 2 * (q_x * q_y - q_w * q_z), 2 * (q_x * q_z + q_w * q_y)],
+            [2 * (q_x * q_y + q_w * q_z), 1 - 2 * q_x ** 2 - 2 * q_z ** 2, 2 * (q_y * q_z - q_w * q_x)],
+            [2 * (q_x * q_z - q_w * q_y), 2 * (q_y * q_z + q_w * q_x), 1 - 2 * q_x ** 2 - 2 * q_y ** 2]
+            ])
+        t = torch.tensor([t_x,t_y,t_z])
+
+        R[:3, :3] = R_3
+        R[:3, 3] = t
+
+        # R = R.inverse()
+        if not (pose.requires_grad or force):
+            return pose
+
+        if R.shape == (4, 4):
+            # assert T is None
+            T = R[:3, 3]
+            R = R[:3, :3]
+
+        if R is not None:
+            pose.data[0:4] = roma.rotmat_to_unitquat(R)
+        if T is not None:
+            pose.data[4:7] = signed_log1p(T / (scale or 1))  # translation is function of scale
+
+        if scale is not None:
+            assert poses.shape[-1] in (8, 13)
+            pose.data[-1] = np.log(float(scale))
+        
+        return pose
 
     def get_pw_norm_scale_factor(self):
         if self.norm_pw_scale:

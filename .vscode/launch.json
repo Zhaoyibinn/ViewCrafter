@@ -42,7 +42,7 @@
             "pythonPath":"/root/miniconda3/envs/viewcrafter/bin/python",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--image_dir", "test/images_sparse/S4",
+            "args": ["--image_dir", "test/images_sparse/DTU24",
             "--out_dir", "./output",
             "--mode","sparse_view_interp",
             "--bg_trd" ,"0.2",
@@ -56,6 +56,17 @@
             // "--height","800","--width","800",
             "--model_path","./checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth"
                 ]
-        }
+        },
+        {
+            "name": "colmap_w2c",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/inference.py",
+            "pythonPath":"/root/miniconda3/envs/viewcrafter/bin/python",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": []
+        },
+
     ]
 }

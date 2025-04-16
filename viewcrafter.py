@@ -32,7 +32,9 @@ class ViewCrafter:
         self.opts = opts
         self.device = opts.device
         self.setup_dust3r()
-        self.setup_diffusion()
+
+        # print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!注意注意 赵逸彬取消了扩散模型的初始化 不然太慢了")
+        
         # initialize ref images, pcd
         if not gradio:
             if os.path.isfile(self.opts.image_dir):
@@ -42,7 +44,9 @@ class ViewCrafter:
                 self.images, self.img_ori = self.load_initial_dir(image_dir=self.opts.image_dir)
                 self.run_dust3r(input_images=self.images, clean_pc = True)    
             else:
-                print(f"{self.opts.image_dir} doesn't exist")           
+                print(f"{self.opts.image_dir} doesn't exist")       
+
+        self.setup_diffusion()    
         
     def run_dust3r(self, input_images,clean_pc = False):
         pairs = make_pairs(input_images, scene_graph='complete', prefilter=None, symmetrize=True)
@@ -156,6 +160,8 @@ class ViewCrafter:
 
         render_results, viewmask = self.run_render([pcd[-1]], [imgs[-1]],masks, H, W, camera_traj,num_views)
         render_results = F.interpolate(render_results.permute(0,3,1,2), size=(576, 1024), mode='bilinear', align_corners=False).permute(0,2,3,1)
+                         
+        # render_results = F.interpolate(render_results.permute(0,3,1,2), size=(320, 512), mode='bilinear', align_corners=False).permute(0,2,3,1)
         render_results[0] = self.img_ori
         if self.opts.mode == 'single_view_txt':
             if phi[-1]==0. and theta[-1]==0. and r[-1]==0.:
@@ -234,7 +240,7 @@ class ViewCrafter:
         return diffusion_results
     
     def nvs_sparse_view_interp(self):
-
+        # zyb标记 我们用的
         c2ws = self.scene.get_im_poses().detach()
         principal_points = self.scene.get_principal_points().detach()
         focals = self.scene.get_focals().detach()
@@ -261,7 +267,8 @@ class ViewCrafter:
         camera_traj,num_views = generate_traj_interp(c2ws, H, W, focals, principal_points, self.opts.video_length, self.device)
         render_results, viewmask = self.run_render(pcd, imgs,masks, H, W, camera_traj,num_views)
         render_results = F.interpolate(render_results.permute(0,3,1,2), size=(576, 1024), mode='bilinear', align_corners=False).permute(0,2,3,1)
-        
+        # render_results = F.interpolate(render_results.permute(0,3,1,2), size=(608, 800), mode='bilinear', align_corners=False).permute(0,2,3,1)
+
         for i in range(len(self.img_ori)):
             render_results[i*(self.opts.video_length - 1)] = self.img_ori[i]
         save_video(render_results, os.path.join(self.opts.save_dir, f'render.mp4'))
@@ -398,7 +405,10 @@ class ViewCrafter:
         model.eval()
         self.diffusion = model
 
-        h, w = self.opts.height // 8, self.opts.width // 8
+        # h, w = self.opts.height // 8, self.opts.width // 8
+        h, w = math.ceil(self.opts.height / 8), math.ceil(self.opts.width / 8)
+
+        # h, w = 764 // 8, 1024 // 8
         channels = model.model.diffusion_model.out_channels
         n_frames = self.opts.video_length
         self.noise_shape = [self.opts.bs, channels, n_frames, h, w]

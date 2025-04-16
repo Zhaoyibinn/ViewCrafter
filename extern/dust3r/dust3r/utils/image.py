@@ -110,6 +110,9 @@ def load_images(folder_or_list, size, square_ok=False,force_1024 = False):
             continue
         img = exif_transpose(PIL.Image.open(os.path.join(root, path))).convert('RGB')
         if force_1024:
+            target_height = int(img.size[1] * 1024 / img.size[0] )
+            target_height = 768
+            # img = center_crop_pil_image(img,target_width=800, target_height=608)
             img = center_crop_pil_image(img)
         img_ori = img
         W1, H1 = img.size

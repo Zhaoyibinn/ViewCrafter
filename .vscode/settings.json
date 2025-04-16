@@ -1,0 +1,6 @@
+{
+    "python.analysis.extraPaths": [
+        "./extern/dust3r",
+        "./extern/dust3r/croco"
+    ]
+}

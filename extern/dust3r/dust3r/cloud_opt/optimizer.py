@@ -30,7 +30,16 @@ class PointCloudOptimizer(BasePCOptimizer):
         self.im_poses = nn.ParameterList(self.rand_pose(self.POSE_DIM) for _ in range(self.n_imgs))  # camera poses
         self.im_focals = nn.ParameterList(torch.FloatTensor(
             [self.focal_break*np.log(max(H, W))]) for H, W in self.imshapes)  # camera intrinsics
+        
+        beishu = 1554 / self.imshapes[0][1]
+        focal = 2892.33/beishu
+        self.preset_focal([focal,focal,focal,focal])
+
+        
+
         self.im_pp = nn.ParameterList(torch.zeros((2,)) for _ in range(self.n_imgs))  # camera intrinsics
+
+        
         self.im_pp.requires_grad_(optimize_pp)
 
         self.imshape = self.imshapes[0]
@@ -41,6 +50,31 @@ class PointCloudOptimizer(BasePCOptimizer):
         self.im_depthmaps = ParameterStack(self.im_depthmaps, is_param=True, fill=self.max_area)
         self.im_poses = ParameterStack(self.im_poses, is_param=True)
         self.im_focals = ParameterStack(self.im_focals, is_param=True)
+
+        poses = torch.tensor([[-0.0149065, 0.121809, -0.0055981,0.992426, -0.251888, -0.0441718, 2.08357],
+                              [-0.176762, 0.398841, 0.433043,0.788768, 0.0236859, -0.101935, 2.18854],
+                              [-0.391314, 0.262498, 0.145948,0.869866, -0.166493, 0.05637, 2.15618],
+                              [-0.46209, 0.360328, 0.204053,0.784219, -0.0997907, 0.101104, 2.17387]
+                              ])
+        poses_R = []
+        for pose in poses:
+            q_x, q_y, q_z,q_w,t_x,t_y,t_z = pose
+
+            R = torch.eye(4)
+            R_3 = torch.tensor([
+                [1 - 2 * q_y ** 2 - 2 * q_z ** 2, 2 * (q_x * q_y - q_w * q_z), 2 * (q_x * q_z + q_w * q_y)],
+                [2 * (q_x * q_y + q_w * q_z), 1 - 2 * q_x ** 2 - 2 * q_z ** 2, 2 * (q_y * q_z - q_w * q_x)],
+                [2 * (q_x * q_z - q_w * q_y), 2 * (q_y * q_z + q_w * q_x), 1 - 2 * q_x ** 2 - 2 * q_y ** 2]
+                ])
+            t = torch.tensor([t_x,t_y,t_z])
+
+            R[:3, :3] = R_3
+            R[:3, 3] = t
+
+            poses_R.append(R.inverse())
+
+        self.preset_pose(poses_R)
+
         self.im_pp = ParameterStack(self.im_pp, is_param=True)
         self.register_buffer('_pp', torch.tensor([(w/2, h/2) for h, w in self.imshapes]))
         self.register_buffer('_grid', ParameterStack(
@@ -71,6 +105,8 @@ class PointCloudOptimizer(BasePCOptimizer):
         for idx, pose in zip(self._get_msk_indices(pose_msk), known_poses):
             print(f' (setting pose #{idx} = {pose[:3,3]})')
             self._no_grad(self._set_pose(self.im_poses, idx, torch.tensor(pose)))
+
+            # self._no_grad(self._set_pose_fromcolmap(self.im_poses, idx, torch.tensor(pose)))
 
         # normalize scale if there's less than 1 known pose
         n_known_poses = sum((p.requires_grad is False) for p in self.im_poses)
