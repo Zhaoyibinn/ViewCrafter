@@ -47,6 +47,58 @@ class ViewCrafter:
                 print(f"{self.opts.image_dir} doesn't exist")       
 
         self.setup_diffusion()    
+
+    def import_inter_pose(self,camera_traj,num_views):
+        txt_path = "colmap_test.txt"
+        colmap_strs = []
+        Rs,Ts = camera_traj.R,camera_traj.T
+        for i in range(num_views):
+            R = np.array(Rs[i].cpu().detach())
+            T = np.array(Ts[i].cpu().detach())
+            R_colmap = R.copy()
+            R_colmap[:, :2] = -R_colmap[:, :2]
+            R_colmap = R_colmap.T
+
+            tr = np.trace(R_colmap)
+            S = np.sqrt(tr + 1.0) * 2
+            qw = 0.25 * S
+            qx = (R_colmap[2, 1] - R_colmap[1, 2]) / S
+            qy = (R_colmap[0, 2] - R_colmap[2, 0]) / S
+            qz = (R_colmap[1, 0] - R_colmap[0, 1]) / S
+            np.set_printoptions(suppress=True)
+
+            q_colmap = np.array([qw,qx,qy,qz])
+            t_colmap = np.array([-T[0],-T[1],T[2]])
+            
+            q_colmap_str = " ".join(["{:06f}".format(i) for i in q_colmap.tolist()])
+            t_colmap_str = " ".join(["{:06f}".format(i) for i in t_colmap.tolist()])
+            idx_str = str(i + 1).replace(" ","")
+            camera_id = "1"
+            img_name = "{:04d}".format(i) + ".png"
+
+            colmap_str_list = [idx_str , q_colmap_str , t_colmap_str , camera_id , img_name]
+            colmap_str = " ".join(colmap_str_list)
+            # print(colmap_str)
+            colmap_strs.append(colmap_str)
+
+        try:
+            with open(txt_path, 'w', encoding='utf-8') as file:
+                file.write("# Image list with two lines of data per image:" + '\n')
+                file.write("#   IMAGE_ID, QW, QX, QY, QZ, TX, TY, TZ, CAMERA_ID, NAME" + '\n')
+                file.write("#   POINTS2D[] as (X, Y, POINT3D_ID)" + '\n')
+                file.write("# Number of images: 49, mean observations per image: 2172.8367346938776" + '\n')
+
+                for line in colmap_strs:
+                    file.write(line + '\n')
+                    file.write('\n')
+            print(f"colmap测试数据已成功逐行写入 {txt_path}")
+        except Exception as e:
+            print(f"写入文件时出现错误: {e}")
+
+            
+            
+
+        return 0
         
     def run_dust3r(self, input_images,clean_pc = False):
         pairs = make_pairs(input_images, scene_graph='complete', prefilter=None, symmetrize=True)
@@ -265,6 +317,7 @@ class ViewCrafter:
         imgs = np.array(self.scene.imgs)
 
         camera_traj,num_views = generate_traj_interp(c2ws, H, W, focals, principal_points, self.opts.video_length, self.device)
+        self.import_inter_pose(camera_traj,num_views)
         render_results, viewmask = self.run_render(pcd, imgs,masks, H, W, camera_traj,num_views)
         render_results = F.interpolate(render_results.permute(0,3,1,2), size=(576, 1024), mode='bilinear', align_corners=False).permute(0,2,3,1)
         # render_results = F.interpolate(render_results.permute(0,3,1,2), size=(608, 800), mode='bilinear', align_corners=False).permute(0,2,3,1)

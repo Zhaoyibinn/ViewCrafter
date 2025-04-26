@@ -33,7 +33,7 @@ class PointCloudOptimizer(BasePCOptimizer):
         
         beishu = 1554 / self.imshapes[0][1]
         focal = 2892.33/beishu
-        self.preset_focal([focal,focal,focal,focal])
+        self.preset_focal([focal,focal,focal])
 
         
 
@@ -51,10 +51,9 @@ class PointCloudOptimizer(BasePCOptimizer):
         self.im_poses = ParameterStack(self.im_poses, is_param=True)
         self.im_focals = ParameterStack(self.im_focals, is_param=True)
 
-        poses = torch.tensor([[-0.0149065, 0.121809, -0.0055981,0.992426, -0.251888, -0.0441718, 2.08357],
-                              [-0.176762, 0.398841, 0.433043,0.788768, 0.0236859, -0.101935, 2.18854],
-                              [-0.391314, 0.262498, 0.145948,0.869866, -0.166493, 0.05637, 2.15618],
-                              [-0.46209, 0.360328, 0.204053,0.784219, -0.0997907, 0.101104, 2.17387]
+        poses = torch.tensor([[-0.255247 ,0.445303, 0.411508 ,0.753137 ,0.0383138 ,-0.0398592 ,2.20188],
+                              [-0.273873 ,0.385703, 0.332381 ,0.815935 ,-0.032467 ,-0.0339917, 2.20248],
+                              [-0.342494 ,0.461537, 0.353701 ,0.737955 ,0.0138901 ,0.0283774 ,2.20486]
                               ])
         poses_R = []
         for pose in poses:
