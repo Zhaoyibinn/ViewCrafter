@@ -19,7 +19,7 @@ class PointCloudOptimizer(BasePCOptimizer):
     Graph edges: observations = (pred1, pred2)
     """
 
-    def __init__(self, *args, optimize_pp=False, focal_break=20, **kwargs):
+    def __init__(self, *args, optimize_pp=False, focal_break=20, dtu_path = None,**kwargs):
         super().__init__(*args, **kwargs)
 
         self.has_im_poses = True  # by definition of this class
@@ -50,11 +50,40 @@ class PointCloudOptimizer(BasePCOptimizer):
         self.im_depthmaps = ParameterStack(self.im_depthmaps, is_param=True, fill=self.max_area)
         self.im_poses = ParameterStack(self.im_poses, is_param=True)
         self.im_focals = ParameterStack(self.im_focals, is_param=True)
+        # 手动确定colmap位姿
+        # poses = torch.tensor([[-0.255247 ,0.445303, 0.411508 ,0.753137 ,0.0383138 ,-0.0398592 ,2.20188],
+        #                       [-0.273873 ,0.385703, 0.332381 ,0.815935 ,-0.032467 ,-0.0339917, 2.20248],
+        #                       [-0.342494 ,0.461537, 0.353701 ,0.737955 ,0.0138901 ,0.0283774 ,2.20486]
+        #                       ])
+        # # DTU24
 
-        poses = torch.tensor([[-0.255247 ,0.445303, 0.411508 ,0.753137 ,0.0383138 ,-0.0398592 ,2.20188],
-                              [-0.273873 ,0.385703, 0.332381 ,0.815935 ,-0.032467 ,-0.0339917, 2.20248],
-                              [-0.342494 ,0.461537, 0.353701 ,0.737955 ,0.0138901 ,0.0283774 ,2.20486]
-                              ])
+        # poses = torch.tensor([[-0.255247 ,0.445303, 0.411508 ,0.753137 ,0.130005,0.146551, 2.609230],
+        #                 [-0.273873 ,0.385703, 0.332381 ,0.815935 ,0.0537329,0.143837, 2.62458],
+        #                 [-0.342494 ,0.461537, 0.353701 ,0.737955 ,0.09881470,0.237933,2.57723]
+        #                 ])
+        # DTU37
+        
+        # poses = torch.tensor([[-0.255247 ,0.445303, 0.411508 ,0.753137 ,0.0392383 ,-0.00483546,2.02142],
+        #                 [-0.273873 ,0.385703, 0.332381 ,0.815935 ,-0.004661,-0.0027451, 2.02437],
+        #                 [-0.342494 ,0.461537, 0.353701 ,0.737955 ,0.0224222,0.039626,2.01995]
+        #                 ])
+        # DTU40
+
+        if dtu_path:
+            txt_path = dtu_path + '/images.txt'
+
+            with open(txt_path, 'r', encoding='utf-8') as file:
+                lines = file.readlines()
+                lines = lines[4:]
+                poses = torch.zeros(int(len(lines)/2),7)
+                for idx,line in enumerate(lines):
+                    if idx % 2 == 0:
+                        line_splited = line.split()
+                        image_idx = int(line_splited[-1][:4])
+                        pose = torch.tensor([float(line_splited[2]),float(line_splited[3]),float(line_splited[4]),float(line_splited[1]),float(line_splited[5]),float(line_splited[6]),float(line_splited[7])])
+                        poses[image_idx] = pose
+                        # print(poses)
+
         poses_R = []
         for pose in poses:
             q_x, q_y, q_z,q_w,t_x,t_y,t_z = pose

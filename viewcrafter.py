@@ -42,14 +42,16 @@ class ViewCrafter:
                 self.run_dust3r(input_images=self.images)
             elif os.path.isdir(self.opts.image_dir):
                 self.images, self.img_ori = self.load_initial_dir(image_dir=self.opts.image_dir)
-                self.run_dust3r(input_images=self.images, clean_pc = True)    
+
+                self.run_dust3r(input_images=self.images, clean_pc = True,dtu_path=opts.dtu_path)    
             else:
                 print(f"{self.opts.image_dir} doesn't exist")       
 
         self.setup_diffusion()    
 
     def import_inter_pose(self,camera_traj,num_views):
-        txt_path = "colmap_test.txt"
+        
+        txt_path = self.opts.dtu_path + "/images_inter.txt"
         colmap_strs = []
         Rs,Ts = camera_traj.R,camera_traj.T
         for i in range(num_views):
@@ -100,12 +102,12 @@ class ViewCrafter:
 
         return 0
         
-    def run_dust3r(self, input_images,clean_pc = False):
+    def run_dust3r(self, input_images,clean_pc = False,dtu_path = None):
         pairs = make_pairs(input_images, scene_graph='complete', prefilter=None, symmetrize=True)
         output = inference(pairs, self.dust3r, self.device, batch_size=self.opts.batch_size)
 
         mode = GlobalAlignerMode.PointCloudOptimizer #if len(self.images) > 2 else GlobalAlignerMode.PairViewer
-        scene = global_aligner(output, device=self.device, mode=mode)
+        scene = global_aligner(output, device=self.device, mode=mode,dtu_path = dtu_path)
         if mode == GlobalAlignerMode.PointCloudOptimizer:
             loss = scene.compute_global_alignment(init='mst', niter=self.opts.niter, schedule=self.opts.schedule, lr=self.opts.lr)
 
@@ -153,6 +155,9 @@ class ViewCrafter:
         condition_index = [0]
         with torch.no_grad(), torch.cuda.amp.autocast():
             # [1,1,c,t,h,w]
+            h, w = math.ceil(videos.shape[-2] / 8), math.ceil(videos.shape[-1] / 8)
+
+            self.noise_shape = [self.opts.bs, self.diff_channels, self.diff_n_frames, h, w]
             batch_samples = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps, self.opts.ddim_eta, \
                                self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride, self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale, condition_index)
 
@@ -320,10 +325,13 @@ class ViewCrafter:
         self.import_inter_pose(camera_traj,num_views)
         render_results, viewmask = self.run_render(pcd, imgs,masks, H, W, camera_traj,num_views)
         render_results = F.interpolate(render_results.permute(0,3,1,2), size=(576, 1024), mode='bilinear', align_corners=False).permute(0,2,3,1)
-        # render_results = F.interpolate(render_results.permute(0,3,1,2), size=(608, 800), mode='bilinear', align_corners=False).permute(0,2,3,1)
+        # render_results = F.interpolate(render_results.permute(0,3,1,2), size=(1162, 1554), mode='bilinear', align_corners=False).permute(0,2,3,1)
 
         for i in range(len(self.img_ori)):
-            render_results[i*(self.opts.video_length - 1)] = self.img_ori[i]
+            ori_img = self.img_ori[i]
+            # render_results[i*(self.opts.video_length - 1)] = self.img_ori[i]
+            ori_img_reshape = F.interpolate(ori_img.unsqueeze(0).permute(0,3,1,2), size=(render_results.shape[1], render_results.shape[2]), mode='bilinear', align_corners=False).permute(0,2,3,1)
+            render_results[i*(self.opts.video_length - 1)] = ori_img_reshape
         save_video(render_results, os.path.join(self.opts.save_dir, f'render.mp4'))
         save_pointcloud_with_normals(imgs, pcd, msk=masks, save_path=os.path.join(self.opts.save_dir, f'pcd.ply') , mask_pc=mask_pc, reduce_pc=False)
 
@@ -464,6 +472,8 @@ class ViewCrafter:
         # h, w = 764 // 8, 1024 // 8
         channels = model.model.diffusion_model.out_channels
         n_frames = self.opts.video_length
+        self.diff_channels = channels
+        self.diff_n_frames = n_frames
         self.noise_shape = [self.opts.bs, channels, n_frames, h, w]
 
     def setup_dust3r(self):
@@ -487,14 +497,18 @@ class ViewCrafter:
 
         if len(image_files) < 2:
             raise ValueError("Input views should not less than 2.")
+        image_files = [s for s in image_files if not s.endswith("masks")]
         image_files = sorted(image_files, key=lambda x: int(x.split('/')[-1].split('.')[0]))
-        images = load_images(image_files, size=512,force_1024 = True)
+        # images = load_images(image_files, size=512,force_1024 = True)
+        images = load_images(image_files, size=416,force_1024 = False)
 
         img_gts = []
         for i in range(len(image_files)):
             img_gts.append((images[i]['img_ori'].squeeze(0).permute(1,2,0)+1.)/2.) 
 
         return images, img_gts
+
+
 
     def run_gradio(self,i2v_input_image, i2v_elevation, i2v_center_scale, i2v_d_phi, i2v_d_theta, i2v_d_r, i2v_steps, i2v_seed):
         self.opts.elevation = float(i2v_elevation)

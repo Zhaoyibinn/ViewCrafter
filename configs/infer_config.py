@@ -56,5 +56,6 @@ def get_parser():
     parser.add_argument('--niter', default=300)
     parser.add_argument('--lr', default=0.01)
     parser.add_argument('--min_conf_thr', default=3.0) # minimum=1.0, maximum=20
+    parser.add_argument('--dtu_path', default=None) # minimum=1.0, maximum=20
 
     return parser

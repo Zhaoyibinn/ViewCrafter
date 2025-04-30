@@ -30,7 +30,7 @@
             "--video_length","25",
             "--device","cuda:0",
             // "--height","576","--width","1024",
-            "--height","800","--width","800",
+            "--height","512","--width","672",
             "--model_path","./checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth"
                 ]
         },
@@ -42,8 +42,10 @@
             "pythonPath":"/root/miniconda3/envs/viewcrafter/bin/python",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--image_dir", "test/images_sparse/DTU24_3",
-            "--out_dir", "./output",
+            "args": ["--image_dir", "test/DTU_3/scan55/images",
+            "--dtu_path","test/DTU_3/scan55/sparse/0",
+            "--exp_name","scan55",
+            "--out_dir", "./output/DTU_3",
             "--mode","sparse_view_interp",
             "--bg_trd" ,"0.2",
             "--seed","123",
@@ -53,7 +55,7 @@
             "--video_length","25",
             "--device","cuda:0",
             "--height","576","--width","1024",
-            // "--height","800","--width","800",
+            // "--height","512","--width","672",
             "--model_path","./checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth"
                 ]
         },
