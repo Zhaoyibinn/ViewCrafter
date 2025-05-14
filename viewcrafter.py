@@ -47,11 +47,11 @@ class ViewCrafter:
             else:
                 print(f"{self.opts.image_dir} doesn't exist")       
 
-        self.setup_diffusion()    
+        self.setup_diffusion()
 
     def import_inter_pose(self,camera_traj,num_views):
         
-        txt_path = self.opts.dtu_path + "/images_inter.txt"
+        txt_path = self.opts.save_dir + "/images_inter.txt"
         colmap_strs = []
         Rs,Ts = camera_traj.R,camera_traj.T
         for i in range(num_views):

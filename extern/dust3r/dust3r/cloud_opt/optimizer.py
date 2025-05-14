@@ -31,8 +31,8 @@ class PointCloudOptimizer(BasePCOptimizer):
         self.im_focals = nn.ParameterList(torch.FloatTensor(
             [self.focal_break*np.log(max(H, W))]) for H, W in self.imshapes)  # camera intrinsics
         
-        beishu = 1554 / self.imshapes[0][1]
-        focal = 2892.33/beishu
+        beishu = 768.0 / self.imshapes[0][1]
+        focal = 640.0/beishu
         self.preset_focal([focal,focal,focal])
 
         
