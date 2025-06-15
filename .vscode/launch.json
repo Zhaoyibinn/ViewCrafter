@@ -61,10 +61,10 @@
                 ]
         },
         {
-            "name": "colmap_w2c",
+            "name": "main_dust3r.py",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/inference.py",
+            "program": "main_dust3r.py",
             // "pythonPath":"/root/miniconda3/envs/viewcrafter/bin/python",
             "console": "integratedTerminal",
             "justMyCode": true,

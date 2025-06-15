@@ -36,7 +36,7 @@ class PointCloudOptimizer(BasePCOptimizer):
         # BMVS
 
         beishu = 1554.0 / self.imshapes[0][1]
-        focal = 1162.0/beishu
+        focal = 2892.33/beishu
         # DTU
 
         self.preset_focal([focal,focal,focal])
