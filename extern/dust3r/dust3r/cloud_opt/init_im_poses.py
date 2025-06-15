@@ -73,7 +73,7 @@ def init_minimum_spanning_tree(self, **kw):
     pts3d, _, im_focals, im_poses = minimum_spanning_tree(self.imshapes, self.edges,
                                                           self.pred_i, self.pred_j, self.conf_i, self.conf_j, self.im_conf, self.min_conf_thr,
                                                           device, has_im_poses=self.has_im_poses, **kw)
-
+    # self.im_conf就是对于每一个视图在各种情况下的置信度最大值
     return init_from_pts3d(self, pts3d, im_focals, im_poses)
 
 
@@ -84,6 +84,7 @@ def init_from_pts3d(self, pts3d, im_focals, im_poses):
         raise NotImplementedError("Would be simpler to just align everything afterwards on the single known pose")
     elif nkp > 1:
         # global rigid SE3 alignment
+        # 把所有经过配准的位姿都刚体变化到真正的位姿上
         s, R, T = align_multiple_poses(im_poses[known_poses_msk], known_poses[known_poses_msk])
         trf = sRT_to_4x4(s, R, T, device=known_poses.device)
 
@@ -115,6 +116,8 @@ def init_from_pts3d(self, pts3d, im_focals, im_poses):
             self._set_pose(self.im_poses, i, cam2world)
             if im_focals[i] is not None:
                 self._set_focal(i, im_focals[i])
+            
+            # set_pose 和 set_focal都判断了是否有梯度 如果没有梯度也就是传进来了 那就不设定
 
     print(' init loss =', float(self()))
 
@@ -123,7 +126,9 @@ def minimum_spanning_tree(imshapes, edges, pred_i, pred_j, conf_i, conf_j, im_co
                           device, has_im_poses=True, niter_PnP=10):
     n_imgs = len(imshapes)
     sparse_graph = -dict_to_sparse_graph(compute_edge_scores(map(i_j_ij, edges), conf_i, conf_j))
+    # 图的分数就表示了两张置信度图的乘积 也就是置信度越高边权越大
     msp = sp.csgraph.minimum_spanning_tree(sparse_graph).tocoo()
+    # 取负数的最小生成树 也就是最大生成树 这里应该就是找到了最相关的图对
 
     # temp variable to store 3d points
     pts3d = [None] * len(imshapes)
@@ -216,6 +221,7 @@ def dict_to_sparse_graph(dic):
 def rigid_points_registration(pts1, pts2, conf):
     R, T, s = roma.rigid_points_registration(
         pts1.reshape(-1, 3), pts2.reshape(-1, 3), weights=conf.ravel(), compute_scaling=True)
+    # 这里就是配准的方法了 其实很弱智
     return s, R, T  # return un-scaled (R, T)
 
 

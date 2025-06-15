@@ -105,7 +105,7 @@ class ViewCrafter:
     def run_dust3r(self, input_images,clean_pc = False,dtu_path = None):
         pairs = make_pairs(input_images, scene_graph='complete', prefilter=None, symmetrize=True)
         output = inference(pairs, self.dust3r, self.device, batch_size=self.opts.batch_size)
-
+        
         mode = GlobalAlignerMode.PointCloudOptimizer #if len(self.images) > 2 else GlobalAlignerMode.PairViewer
         scene = global_aligner(output, device=self.device, mode=mode,dtu_path = dtu_path)
         if mode == GlobalAlignerMode.PointCloudOptimizer:
@@ -160,7 +160,8 @@ class ViewCrafter:
             self.noise_shape = [self.opts.bs, self.diff_channels, self.diff_n_frames, h, w]
             batch_samples = image_guided_synthesis(self.diffusion, prompts, videos, self.noise_shape, self.opts.n_samples, self.opts.ddim_steps, self.opts.ddim_eta, \
                                self.opts.unconditional_guidance_scale, self.opts.cfg_img, self.opts.frame_stride, self.opts.text_input, self.opts.multiple_cond_cfg, self.opts.timestep_spacing, self.opts.guidance_rescale, condition_index)
-
+            # cv2.imwrite("test.png",(np.transpose(np.array(videos[0,:,0].cpu().detach()), axes=(1, 2, 0)) + 1) / 2 * 255)
+            # videos包含了渲染图像和原始图像
             # save_results_seperate(batch_samples[0], self.opts.save_dir, fps=8)
             # torch.Size([1, 3, 25, 576, 1024]) [-1,1]
 
@@ -177,10 +178,10 @@ class ViewCrafter:
         depth = [i.detach() for i in self.scene.get_depthmaps()]
         depth_avg = depth[-1][H//2,W//2] #以图像中心处的depth(z)为球心旋转
         radius = depth_avg*self.opts.center_scale #缩放调整
-
+        
         ## change coordinate
         c2ws,pcd =  world_point_to_obj(poses=c2ws, points=torch.stack(pcd), k=-1, r=radius, elevation=self.opts.elevation, device=self.device)
-
+        
         imgs = np.array(self.scene.imgs)
         
         masks = None
@@ -297,7 +298,8 @@ class ViewCrafter:
         return diffusion_results
     
     def nvs_sparse_view_interp(self):
-        # zyb标记 我们用的
+        
+        # zyb标记 插值位姿 我们用的
         c2ws = self.scene.get_im_poses().detach()
         principal_points = self.scene.get_principal_points().detach()
         focals = self.scene.get_focals().detach()
@@ -313,18 +315,26 @@ class ViewCrafter:
             ## masks for cleaner point cloud
             self.scene.min_conf_thr = float(self.scene.conf_trf(torch.tensor(self.opts.min_conf_thr)))
             masks = self.scene.get_masks()
+            more_mask = self.scene.get_more_masks(1.0)
+            # 这里传参的数字就代表了mask过滤的严格性 越大mask越严格
             depth = self.scene.get_depthmaps()
             bgs_mask = [dpt > self.opts.bg_trd*(torch.max(dpt[40:-40,:])+torch.min(dpt[40:-40,:])) for dpt in depth]
             masks_new = [m+mb for m, mb in zip(masks,bgs_mask)] 
+            masks_filtered_new = [m&mb for m, mb in zip(more_mask,bgs_mask)] 
             masks = to_numpy(masks_new)
+            masks_filtered = to_numpy(masks_filtered_new)
             mask_pc = True
 
         imgs = np.array(self.scene.imgs)
 
         camera_traj,num_views = generate_traj_interp(c2ws, H, W, focals, principal_points, self.opts.video_length, self.device)
         self.import_inter_pose(camera_traj,num_views)
+        # masks = None
         render_results, viewmask = self.run_render(pcd, imgs,masks, H, W, camera_traj,num_views)
         render_results = F.interpolate(render_results.permute(0,3,1,2), size=(576, 1024), mode='bilinear', align_corners=False).permute(0,2,3,1)
+        
+        render_results_filtered, _ = self.run_render(pcd, imgs,masks_filtered, H, W, camera_traj,num_views)
+        render_results_filtered = F.interpolate(render_results_filtered.permute(0,3,1,2), size=(576, 1024), mode='bilinear', align_corners=False).permute(0,2,3,1)
         # render_results = F.interpolate(render_results.permute(0,3,1,2), size=(1162, 1554), mode='bilinear', align_corners=False).permute(0,2,3,1)
 
         for i in range(len(self.img_ori)):
@@ -332,19 +342,34 @@ class ViewCrafter:
             # render_results[i*(self.opts.video_length - 1)] = self.img_ori[i]
             ori_img_reshape = F.interpolate(ori_img.unsqueeze(0).permute(0,3,1,2), size=(render_results.shape[1], render_results.shape[2]), mode='bilinear', align_corners=False).permute(0,2,3,1)
             render_results[i*(self.opts.video_length - 1)] = ori_img_reshape
+            render_results_filtered[i*(self.opts.video_length - 1)] = ori_img_reshape
         save_video(render_results, os.path.join(self.opts.save_dir, f'render.mp4'))
+        save_video(render_results_filtered, os.path.join(self.opts.save_dir, f'render_filtered.mp4'))
         save_pointcloud_with_normals(imgs, pcd, msk=masks, save_path=os.path.join(self.opts.save_dir, f'pcd.ply') , mask_pc=mask_pc, reduce_pc=False)
-
+        save_pointcloud_with_normals(imgs, pcd, msk=masks_filtered, save_path=os.path.join(self.opts.save_dir, f'pcd_filtered.ply') , mask_pc=mask_pc, reduce_pc=False)
+        save_masks([mask_filtered * 255 for mask_filtered in masks_filtered],os.path.join(self.opts.save_dir, f'mask_dust3r'))
+        
         diffusion_results = []
+        diffusion_results_filtered = []
         print(f'Generating {len(self.img_ori)-1} clips\n')
         for i in range(len(self.img_ori)-1 ):
             print(f'Generating clip {i} ...\n')
+            render_results_filtered  = render_results_filtered.cpu()
+            # del render_results_filtered 
+            torch.cuda.empty_cache()
             diffusion_results.append(self.run_diffusion(render_results[i*(self.opts.video_length - 1):self.opts.video_length+i*(self.opts.video_length - 1)]))
+            render_results_filtered = render_results_filtered.cuda()
+            diffusion_results_filtered.append(self.run_diffusion(render_results_filtered[i*(self.opts.video_length - 1):self.opts.video_length+i*(self.opts.video_length - 1)]))
+
+
         print(f'Finish!\n')
+        
         diffusion_results = torch.cat(diffusion_results)
+        diffusion_results_filtered = torch.cat(diffusion_results_filtered)
         save_video((diffusion_results + 1.0) / 2.0, os.path.join(self.opts.save_dir, f'diffusion.mp4'))
+        save_video((diffusion_results_filtered + 1.0) / 2.0, os.path.join(self.opts.save_dir, f'diffusion_filtered.mp4'))
         # torch.Size([25, 576, 1024, 3])
-        return diffusion_results
+        return 0
 
     def nvs_single_view_eval(self):
 

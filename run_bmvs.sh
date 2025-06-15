@@ -2,7 +2,7 @@
 
 # 定义扫描编号数组
 # scans=(24 37 40 55 63 65 69 83 97 105 106 110 114 118 122)
-scans=(5a48d4b2c7dab83a7d7b9851 5aa235f64a17b335eeaf9609)
+scans=(5947b62af1b45630bd0c2a02)
 # 定义基础路径和通用参数
 base_dir="/root/ViewCrafter"
 conda_env="/root/miniconda3/envs/viewcrafter/bin/python"

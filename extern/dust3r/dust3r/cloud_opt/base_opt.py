@@ -229,6 +229,9 @@ class BasePCOptimizer (nn.Module):
 
     def get_masks(self):
         return [(conf > self.min_conf_thr) for conf in self.im_conf]
+    
+    def get_more_masks(self,beishu):
+        return [(conf > self.min_conf_thr * beishu) for conf in self.im_conf]
 
     def depth_to_pts3d(self,clip_thred=None):
         raise NotImplementedError()

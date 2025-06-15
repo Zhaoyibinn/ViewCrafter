@@ -124,12 +124,12 @@ def image_guided_synthesis(model, prompts, videos, noise_shape, n_samples=1, ddi
         prompts = [""]*batch_size
     assert condition_index is not None, "Error: condition index is None!"
 
-    img = videos[:,:,condition_index[0]] #bchw
+    img = videos[:,:,condition_index[0]] #bchw 应该是真实的清晰视图
     img_emb = model.embedder(img) ## blc
     img_emb = model.image_proj_model(img_emb)
 
     cond_emb = model.get_learned_conditioning(prompts)
-    cond = {"c_crossattn": [torch.cat([cond_emb,img_emb], dim=1)]}
+    cond = {"c_crossattn": [torch.cat([cond_emb,img_emb], dim=1)]} #既有图像的嵌入也有文字
     if model.model.conditioning_key == 'hybrid':
         z = get_latent_z(model, videos) # b c t h w
         # if loop or interp:

@@ -41,6 +41,7 @@ class DPTOutputAdapter_fix(DPTOutputAdapter):
         N_W = W // (self.stride_level * self.P_W)
 
         # Hook decoder onto 4 layers from specified ViT layers
+        # 就挑几个层输入
         layers = [encoder_tokens[hook] for hook in self.hooks]
 
         # Extract only task-relevant tokens and ignore global tokens.
@@ -54,11 +55,12 @@ class DPTOutputAdapter_fix(DPTOutputAdapter):
         layers = [self.scratch.layer_rn[idx](l) for idx, l in enumerate(layers)]
 
         # Fuse layers using refinement stages
+        # 上面就是一大堆CNN 然后出来四个shape不一样的layer
         path_4 = self.scratch.refinenet4(layers[3])[:, :, :layers[2].shape[2], :layers[2].shape[3]]
         path_3 = self.scratch.refinenet3(path_4, layers[2])
         path_2 = self.scratch.refinenet2(path_3, layers[1])
         path_1 = self.scratch.refinenet1(path_2, layers[0])
-
+        # 再fusion到一个tensor里面
         # Output head
         out = self.head(path_1)
 

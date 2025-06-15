@@ -21,8 +21,8 @@ class PatchEmbedDust3R(PatchEmbed):
         B, C, H, W = x.shape
         assert H % self.patch_size[0] == 0, f"Input image height ({H}) is not a multiple of patch size ({self.patch_size[0]})."
         assert W % self.patch_size[1] == 0, f"Input image width ({W}) is not a multiple of patch size ({self.patch_size[1]})."
-        x = self.proj(x)
-        pos = self.position_getter(B, x.size(2), x.size(3), x.device)
+        x = self.proj(x) #一个CNN 步伐很大 所以分成patch
+        pos = self.position_getter(B, x.size(2), x.size(3), x.device) #上面CNN相当于把图像分为了一个个patch然后编码 这里就是一个arrange 
         if self.flatten:
             x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
         x = self.norm(x)

@@ -35,6 +35,8 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from torchvision.transforms import CenterCrop, Compose, Resize
 
+import cv2
+
 def save_video(data,images_path,folder=None):
     if isinstance(data, np.ndarray):
         tensor_data = (torch.from_numpy(data) * 255).to(torch.uint8)
@@ -434,6 +436,14 @@ def inv(mat):
     if isinstance(mat, np.ndarray):
         return np.linalg.inv(mat)
     raise ValueError(f'bad matrix type = {type(mat)}')
+
+def save_masks(img_list,save_path_root):
+    idx = 0
+    if not os.path.exists(save_path_root):
+        os.mkdir(save_path_root)
+    for img in img_list:
+        cv2.imwrite(os.path.join(save_path_root,f"{idx:04d}.png"),img)
+        idx = idx + 1
 
 def save_pointcloud_with_normals(imgs, pts3d, msk, save_path, mask_pc, reduce_pc):
     pc = get_pc(imgs, pts3d, msk,mask_pc,reduce_pc)  # Assuming get_pc is defined elsewhere and returns a trimesh point cloud

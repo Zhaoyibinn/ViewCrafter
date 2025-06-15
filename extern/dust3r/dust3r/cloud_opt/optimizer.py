@@ -31,8 +31,14 @@ class PointCloudOptimizer(BasePCOptimizer):
         self.im_focals = nn.ParameterList(torch.FloatTensor(
             [self.focal_break*np.log(max(H, W))]) for H, W in self.imshapes)  # camera intrinsics
         
-        beishu = 768.0 / self.imshapes[0][1]
-        focal = 640.0/beishu
+        # beishu = 768.0 / self.imshapes[0][1]
+        # focal = 640.0/beishu
+        # BMVS
+
+        beishu = 1554.0 / self.imshapes[0][1]
+        focal = 1162.0/beishu
+        # DTU
+
         self.preset_focal([focal,focal,focal])
 
         
@@ -102,7 +108,7 @@ class PointCloudOptimizer(BasePCOptimizer):
             poses_R.append(R.inverse())
 
         self.preset_pose(poses_R)
-
+        # 手动指定了位姿
         self.im_pp = ParameterStack(self.im_pp, is_param=True)
         self.register_buffer('_pp', torch.tensor([(w/2, h/2) for h, w in self.imshapes]))
         self.register_buffer('_grid', ParameterStack(
@@ -245,11 +251,26 @@ class PointCloudOptimizer(BasePCOptimizer):
 
     def get_pts3d(self, raw=False, clip_thred=None):
         res = self.depth_to_pts3d(clip_thred)
+        
         if not raw:
             res = [dm[:h*w].view(h, w, 3) for dm, (h, w) in zip(res, self.imshapes)]
         return res
+    
+    def get_pts3d_filtered(self, raw=False, clip_thred=None):
+        res = self.depth_to_pts3d(clip_thred)
+        res_filtered = []
+        for i in range(res.shape[0]):
+            flatten_img = torch.flatten(torch.tensor(self.imgs[i][:,:,0]))
+            zero_indices = (flatten_img == 0).nonzero(as_tuple=True)[0]
+            keep_mask = torch.ones(flatten_img.size(0), dtype=torch.bool)
+            keep_mask[zero_indices] = False
+            res_filtered.append(res[i][keep_mask])
+        if not raw:
+            res = [dm[:h*w].view(h, w, 3) for dm, (h, w) in zip(res, self.imshapes)]
+        return res_filtered
 
     def forward(self):
+        # 计算loss反向传播
         pw_poses = self.get_pw_poses()  # cam-to-world
         pw_adapt = self.get_adaptors().unsqueeze(1)
         proj_pts3d = self.get_pts3d(raw=True)

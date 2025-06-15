@@ -11,6 +11,7 @@ def postprocess(out, depth_mode, conf_mode):
     """
     extract 3D points/confidence from prediction head output
     """
+    # 前三层用来回归深度，第四层用来回归置信度
     fmap = out.permute(0, 2, 3, 1)  # B,H,W,3
     res = dict(pts3d=reg_dense_depth(fmap[:, :, :, 0:3], mode=depth_mode))
 

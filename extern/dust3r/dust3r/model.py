@@ -77,19 +77,24 @@ class AsymmetricCroCo3DStereo (CroCoNet):
         self.downstream_head1 = head_factory(head_type, output_mode, self, has_conf=bool(conf_mode))
         self.downstream_head2 = head_factory(head_type, output_mode, self, has_conf=bool(conf_mode))
         # magic wrapper
+        # 俩输出头
         self.head1 = transpose_to_landscape(self.downstream_head1, activate=landscape_only)
         self.head2 = transpose_to_landscape(self.downstream_head2, activate=landscape_only)
 
     def _encode_image(self, image, true_shape):
         # embed the image into patches  (x has size B x Npatches x C)
+        # 按照patch 编码图像并且flatten BCHW -> BNC pos保存了图像的idx
+        #  RoPE位置编码  位置信息直接融入到注意力机制
         x, pos = self.patch_embed(image, true_shape=true_shape)
 
         # add positional embedding without cls token
         assert self.enc_pos_embed is None
 
         # now apply the transformer encoder and normalization
+        # 这个x是flatten过的 BCHW -> BNC
         for blk in self.enc_blocks:
             x = blk(x, pos)
+            # 多头注意力块 shape不变的
 
         x = self.enc_norm(x)
         return x, pos, None
@@ -128,6 +133,7 @@ class AsymmetricCroCo3DStereo (CroCoNet):
         final_output = [(f1, f2)]  # before projection
 
         # project to decoder dim
+        # 线性层
         f1 = self.decoder_embed(f1)
         f2 = self.decoder_embed(f2)
 
@@ -143,6 +149,7 @@ class AsymmetricCroCo3DStereo (CroCoNet):
         # normalize last output
         del final_output[1]  # duplicate with final_output[0]
         final_output[-1] = tuple(map(self.dec_norm, final_output[-1]))
+        # 返回的是每一层的输出
         return zip(*final_output)
 
     def _downstream_head(self, head_num, decout, img_shape):
@@ -152,10 +159,13 @@ class AsymmetricCroCo3DStereo (CroCoNet):
         return head(decout, img_shape)
 
     def forward(self, view1, view2):
+        # 这就是实际的推理
         # encode the two images --> B,S,D
+        # encoder直接就是一个互多头注意力
         (shape1, shape2), (feat1, feat2), (pos1, pos2) = self._encode_symmetrized(view1, view2)
 
         # combine all ref images into object-centric representation
+        # decoder直接就是两个权重共享的互多头注意力
         dec1, dec2 = self._decoder(feat1, pos1, feat2, pos2)
 
         with torch.cuda.amp.autocast(enabled=False):

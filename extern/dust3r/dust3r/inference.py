@@ -46,6 +46,7 @@ def make_batch_symmetric(batch):
 
 
 def loss_of_one_batch(batch, model, criterion, device, symmetrize_batch=False, use_amp=False, ret=None):
+    
     view1, view2 = batch
     for view in batch:
         for name in 'img pts3d valid_mask camera_pose camera_intrinsics F_matrix corres'.split():  # pseudo_focal
@@ -82,7 +83,7 @@ def inference(pairs, model, device, batch_size=8):
         result.append(to_cpu(res))
 
     result = collate_with_cat(result, lists=multiple_shapes)
-
+    # 这里reshape了一下 键排列方式从一对一对图变为一对中的键 所以从6变成了5
     torch.cuda.empty_cache()
     return result
 
