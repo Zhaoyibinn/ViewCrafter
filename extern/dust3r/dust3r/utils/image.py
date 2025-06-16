@@ -114,6 +114,7 @@ def load_images(folder_or_list, size, square_ok=False,force_1024 = False):
             target_height = 768
             # img = center_crop_pil_image(img,target_width=800, target_height=608)
             img = center_crop_pil_image(img)
+            # 无论什么size都会变成1024 * 576
         img_ori = img
         W1, H1 = img.size
         if size == 224:

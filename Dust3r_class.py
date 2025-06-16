@@ -220,6 +220,20 @@ class Dust3r:
     def run_dust3r(self):
         # assert self.sparse_colmap_path_root is not None, "未检测到Colmap格式的内外参"
         images, img_ori = load_initial_images(image_dir=self.img_path_list)
+
+        Hs , Ws = [], []
+        for img_path in self.img_path_list:
+            origin_image = cv2.imread(img_path)
+            H, W, _ = origin_image.shape
+            Hs.append(H)
+            Ws.append(W)
+        assert len(set(Hs)) == 1 and len(set(Ws)) == 1, "所有图片的尺寸必须一致"
+        
+        self.origin_H = Hs[0]
+        self.origin_W = Ws[0]
+
+            
+
         pairs = make_pairs(images, scene_graph='complete', prefilter=None, symmetrize=True)
         output = inference(pairs, self.dust3r_model, "cuda", batch_size=1)
         
@@ -259,6 +273,39 @@ class Dust3r:
         self.pcd = pcd
         self.depth = depth
         self.imgs = imgs
+
+        self.resized2origin_size()
+
+
+    def resized2origin_size(self):
+        self.masks_filtered_resized = []
+        self.imgs_filtered_resized = []
+        for ii in range(len(self.imgs)):
+            mask_resized_1024_576 = cv2.resize(self.masks_filtered[ii].astype(np.uint8),(1024,576),cv2.IMREAD_UNCHANGED)
+            scale_factor = self.origin_W / 1024
+            resized_height = int(576 * scale_factor)
+            mask_resized_2width = cv2.resize(mask_resized_1024_576,(self.origin_W, resized_height),cv2.IMREAD_UNCHANGED)
+            pad_total = self.origin_H - resized_height  # 1162 - 765 = 397
+            pad_top = pad_total // 2 # 上侧填充: 198
+            # pad_bottom = pad_total - pad_top  # 下侧填充: 199
+
+            padded_mask = np.zeros((self.origin_H, self.origin_W), dtype=mask_resized_2width.dtype)
+            padded_mask[pad_top:pad_top + resized_height, :] = mask_resized_2width
+            self.masks_filtered_resized.append(padded_mask)
+
+
+        for ii in range(len(self.imgs)):
+            mask_resized_1024_576 = cv2.resize((self.imgs[ii] * 255).astype(np.uint8),(1024,576))
+            scale_factor = self.origin_W / 1024
+            resized_height = int(576 * scale_factor)
+            mask_resized_2width = cv2.resize(mask_resized_1024_576,(self.origin_W, resized_height))
+            pad_total = self.origin_H - resized_height  # 1162 - 765 = 397
+            pad_top = pad_total // 2 # 上侧填充: 198
+            # pad_bottom = pad_total - pad_top  # 下侧填充: 199
+
+            padded_mask = np.zeros((self.origin_H, self.origin_W , 3), dtype=mask_resized_2width.dtype)
+            padded_mask[pad_top:pad_top + resized_height, :] = mask_resized_2width
+            self.imgs_filtered_resized.append(padded_mask)
 
     def save_pointcloud_with_normals(self,filter = False,save_path = "test.ply",mask_pc = True):
         if filter:
