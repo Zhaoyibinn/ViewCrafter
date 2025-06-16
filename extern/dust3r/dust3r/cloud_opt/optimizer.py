@@ -31,15 +31,30 @@ class PointCloudOptimizer(BasePCOptimizer):
         self.im_focals = nn.ParameterList(torch.FloatTensor(
             [self.focal_break*np.log(max(H, W))]) for H, W in self.imshapes)  # camera intrinsics
         
-        # beishu = 768.0 / self.imshapes[0][1]
-        # focal = 640.0/beishu
-        # BMVS
 
-        beishu = 1554.0 / self.imshapes[0][1]
-        focal = 2892.33/beishu
-        # DTU
 
-        self.preset_focal([focal,focal,focal])
+        if dtu_path:
+            txt_path = dtu_path + '/cameras.txt'
+            with open(txt_path, 'r', encoding='utf-8') as file:
+                lines = file.readlines()
+                camera_1 = lines[3:][0]
+                fx,fy = float(camera_1.split()[4]),float(camera_1.split()[5])
+                focal_origin = (fx + fy) / 2
+
+                weight = float(camera_1.split()[2])
+                
+                # beishu = 768.0 / self.imshapes[0][1]
+                # focal = 640.0/beishu
+                # BMVS
+
+                # beishu = 1554.0 / self.imshapes[0][1]
+                # focal = 2892.33/beishu
+                # DTU
+
+                beishu = weight / self.imshapes[0][1]
+                focal = focal_origin/beishu
+
+                self.preset_focal([focal,focal,focal])
 
         
 
