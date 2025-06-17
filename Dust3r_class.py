@@ -60,7 +60,7 @@ def get_pc(imgs, pts3d, mask, mask_pc=False, reduce_pc=False):
     
     return pct#, pts
 
-def save_pointcloud_with_normals(imgs, pts3d, msk, save_path, mask_pc, reduce_pc):
+def save_pointcloud_with_normals(imgs, pts3d, msk, save_path, mask_pc, reduce_pc,downsample_voxel = None):
     pc = get_pc(imgs, pts3d, msk,mask_pc,reduce_pc)  # Assuming get_pc is defined elsewhere and returns a trimesh point cloud
 
     # Define a default normal, e.g., [0, 1, 0]
@@ -71,31 +71,56 @@ def save_pointcloud_with_normals(imgs, pts3d, msk, save_path, mask_pc, reduce_pc
     colors = pc.colors
     normals = np.tile(default_normal, (vertices.shape[0], 1))
 
-    # Construct the header of the PLY file
-    header = """ply
-format ascii 1.0
-element vertex {}
-property float x
-property float y
-property float z
-property uchar red
-property uchar green
-property uchar blue
-property float nx
-property float ny
-property float nz
-end_header
-""".format(len(vertices))
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(np.array(vertices))
+    pcd.colors = o3d.utility.Vector3dVector(np.array(colors)[:,:3] / 255)
+    pcd.normals = o3d.utility.Vector3dVector(np.array(normals))
 
-    # Write the PLY file
-    with open(save_path, 'w') as ply_file:
-        ply_file.write(header)
-        for vertex, color, normal in zip(vertices, colors, normals):
-            ply_file.write('{} {} {} {} {} {} {} {} {}\n'.format(
-                vertex[0], vertex[1], vertex[2],
-                int(color[0]), int(color[1]), int(color[2]),
-                normal[0], normal[1], normal[2]
-            ))
+    if downsample_voxel:
+        downsampled_pcd = pcd.voxel_down_sample(voxel_size=downsample_voxel)
+        _, ind = downsampled_pcd.remove_statistical_outlier(
+            nb_neighbors=20, std_ratio=2.0
+        )
+
+        filtered_pcd = downsampled_pcd.select_by_index(ind)
+        print(f"Dust3R进行了滤波 voxel = {downsample_voxel} 点云个数从{np.array(pcd.points).shape[0]}变成了{np.array(downsampled_pcd.points).shape[0]}")
+    else:
+        filtered_pcd = pcd
+
+    o3d.io.write_point_cloud(
+            save_path,
+            filtered_pcd,
+        )
+
+
+
+#     vertices = np.array(filtered_pcd.points)
+#     vertices = np.array(filtered_pcd.points)
+#     # Construct the header of the PLY file
+#     header = """ply
+# format ascii 1.0
+# element vertex {}
+# property float x
+# property float y
+# property float z
+# property uchar red
+# property uchar green
+# property uchar blue
+# property float nx
+# property float ny
+# property float nz
+# end_header
+# """.format(len(vertices))
+
+#     # Write the PLY file
+#     with open(save_path, 'w') as ply_file:
+#         ply_file.write(header)
+#         for vertex, color, normal in zip(vertices, colors, normals):
+#             ply_file.write('{} {} {} {} {} {} {} {} {}\n'.format(
+#                 vertex[0], vertex[1], vertex[2],
+#                 int(color[0]), int(color[1]), int(color[2]),
+#                 normal[0], normal[1], normal[2]
+#             ))
 
 
 
@@ -217,7 +242,7 @@ class Dust3r:
         self.img_path_list = img_path_list
         self.sparse_colmap_path_root = sparse_colmap_path_root
 
-    def run_dust3r(self):
+    def run_dust3r(self,resolution_scale = 1):
         # assert self.sparse_colmap_path_root is not None, "未检测到Colmap格式的内外参"
         images, img_ori = load_initial_images(image_dir=self.img_path_list)
 
@@ -229,8 +254,8 @@ class Dust3r:
             Ws.append(W)
         assert len(set(Hs)) == 1 and len(set(Ws)) == 1, "所有图片的尺寸必须一致"
         
-        self.origin_H = Hs[0]
-        self.origin_W = Ws[0]
+        self.origin_H = int(Hs[0] / resolution_scale)
+        self.origin_W = int(Ws[0] / resolution_scale)
 
             
 
@@ -273,18 +298,29 @@ class Dust3r:
         self.pcd = pcd
         self.depth = depth
         self.imgs = imgs
+        
+        self.conf_img = [im_conf.cpu().detach().numpy() for im_conf in scene.im_conf]
+        self.H,self.W = imgs.shape[1],imgs.shape[2]
 
         self.resized2origin_size()
+        
+        
+    def resized2dust3r(self,img):
 
+        
+        return img
 
+    
     def resized2origin_size(self):
         self.masks_filtered_resized = []
-        self.imgs_filtered_resized = []
+        self.depth_resized = []
+        self.imgs_resized = []
+        self.conf_img_resized = []
         for ii in range(len(self.imgs)):
-            mask_resized_1024_576 = cv2.resize(self.masks_filtered[ii].astype(np.uint8),(1024,576),cv2.IMREAD_UNCHANGED)
+            mask_resized_1024_576 = cv2.resize(self.masks_filtered[ii].astype(np.uint8),(1024,576),cv2.INTER_NEAREST)
             scale_factor = self.origin_W / 1024
             resized_height = int(576 * scale_factor)
-            mask_resized_2width = cv2.resize(mask_resized_1024_576,(self.origin_W, resized_height),cv2.IMREAD_UNCHANGED)
+            mask_resized_2width = cv2.resize(mask_resized_1024_576,(self.origin_W, resized_height),cv2.INTER_NEAREST)
             pad_total = self.origin_H - resized_height  # 1162 - 765 = 397
             pad_top = pad_total // 2 # 上侧填充: 198
             # pad_bottom = pad_total - pad_top  # 下侧填充: 199
@@ -292,6 +328,19 @@ class Dust3r:
             padded_mask = np.zeros((self.origin_H, self.origin_W), dtype=mask_resized_2width.dtype)
             padded_mask[pad_top:pad_top + resized_height, :] = mask_resized_2width
             self.masks_filtered_resized.append(padded_mask)
+
+        for ii in range(len(self.imgs)):
+            mask_resized_1024_576 = cv2.resize(self.depth[ii].cpu().detach().numpy(),(1024,576))
+            scale_factor = self.origin_W / 1024
+            resized_height = int(576 * scale_factor)
+            mask_resized_2width = cv2.resize(mask_resized_1024_576,(self.origin_W, resized_height))
+            pad_total = self.origin_H - resized_height  # 1162 - 765 = 397
+            pad_top = pad_total // 2 # 上侧填充: 198
+            # pad_bottom = pad_total - pad_top  # 下侧填充: 199
+
+            padded_mask = np.zeros((self.origin_H, self.origin_W), dtype=mask_resized_2width.dtype)
+            padded_mask[pad_top:pad_top + resized_height, :] = mask_resized_2width
+            self.depth_resized.append(padded_mask)
 
 
         for ii in range(len(self.imgs)):
@@ -305,13 +354,27 @@ class Dust3r:
 
             padded_mask = np.zeros((self.origin_H, self.origin_W , 3), dtype=mask_resized_2width.dtype)
             padded_mask[pad_top:pad_top + resized_height, :] = mask_resized_2width
-            self.imgs_filtered_resized.append(padded_mask)
+            self.imgs_resized.append(padded_mask)
 
-    def save_pointcloud_with_normals(self,filter = False,save_path = "test.ply",mask_pc = True):
+        for ii in range(len(self.imgs)):
+            mask_resized_1024_576 = cv2.resize(self.conf_img[ii],(1024,576))
+            scale_factor = self.origin_W / 1024
+            resized_height = int(576 * scale_factor)
+            mask_resized_2width = cv2.resize(mask_resized_1024_576,(self.origin_W, resized_height))
+            pad_total = self.origin_H - resized_height  # 1162 - 765 = 397
+            pad_top = pad_total // 2 # 上侧填充: 198
+            # pad_bottom = pad_total - pad_top  # 下侧填充: 199
+
+            padded_mask = np.zeros((self.origin_H, self.origin_W), dtype=mask_resized_2width.dtype)
+            padded_mask[pad_top:pad_top + resized_height, :] = mask_resized_2width
+            self.conf_img_resized.append(padded_mask)
+
+
+    def save_pointcloud_with_normals(self,filter = False,save_path = "test.ply",mask_pc = True,downsample_voxel = None):
         if filter:
-            save_pointcloud_with_normals(self.imgs, self.pcd, msk=self.masks_filtered, save_path=save_path, mask_pc=mask_pc, reduce_pc=False)
+            save_pointcloud_with_normals(self.imgs, self.pcd, msk=self.masks_filtered, save_path=save_path, mask_pc=mask_pc, reduce_pc=False,downsample_voxel = downsample_voxel)
         else:
-            save_pointcloud_with_normals(self.imgs, self.pcd, msk=self.masks, save_path=save_path, mask_pc=mask_pc, reduce_pc=False)
+            save_pointcloud_with_normals(self.imgs, self.pcd, msk=self.masks, save_path=save_path, mask_pc=mask_pc, reduce_pc=False,downsample_voxel = downsample_voxel)
     
     def save_pointcloud_with_gt(self,save_path = "test_withgt.ply",mask_pc = True):
         pc = get_pc(self.imgs, self.pcd, self.masks_filtered,mask_pc=mask_pc,reduce_pc=False) 
