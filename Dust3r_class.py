@@ -277,14 +277,19 @@ class Dust3r:
         pcd = [i.detach() for i in scene.get_pts3d(clip_thred=1)] # a list of points of size whc
         depth = [i.detach() for i in scene.get_depthmaps()]
 
-
+        black_bg_mask = [((image['img'][0][0]!=-1)&(image['img'][0][1]!=-1)&(image['img'][0][2]!=-1)).cuda() for image in images]
         # self.scene.min_conf_thr = float(self.scene.conf_trf(torch.tensor(self.opts.min_conf_thr)))
         scene.min_conf_thr = float(scene.conf_trf(torch.tensor(3.0)))
         masks = scene.get_masks()
+        masks = [mb & bb for mb,bb in zip(masks,black_bg_mask)]
         more_mask = scene.get_more_masks(1.0)
+        more_mask = [mb & bb for mb,bb in zip(more_mask,black_bg_mask)]
         # 这里传参的数字就代表了mask过滤的严格性 越大mask越严格
         depth = scene.get_depthmaps()
         bgs_mask = [dpt > 0.0*(torch.max(dpt[40:-40,:])+torch.min(dpt[40:-40,:])) for dpt in depth]
+        # 纯黑色的都作为背景被过滤
+        bgs_mask = [mb & bb for mb,bb in zip(bgs_mask,black_bg_mask)]
+
         masks_new = [m+mb for m, mb in zip(masks,bgs_mask)] 
         masks_filtered_new = [m&mb for m, mb in zip(more_mask,bgs_mask)] 
         masks = to_numpy(masks_new)
@@ -299,7 +304,7 @@ class Dust3r:
         self.depth = depth
         self.imgs = imgs
         
-        self.conf_img = [im_conf.cpu().detach().numpy() for im_conf in scene.im_conf]
+        self.conf_img = [(im_conf * (bgs*1)).cpu().detach().numpy() for im_conf,bgs in zip(scene.im_conf,bgs_mask)]
         self.H,self.W = imgs.shape[1],imgs.shape[2]
 
         self.resized2origin_size()
