@@ -10,6 +10,7 @@ import trimesh
 import sys
 sys.path.append("extern/dust3r")
 
+
 from dust3r.inference import load_model
 
 from dust3r.inference import inference, load_model
@@ -18,6 +19,7 @@ from dust3r.image_pairs import make_pairs
 from dust3r.cloud_opt import global_aligner, GlobalAlignerMode
 from dust3r.utils.device import to_numpy
 
+from utils.mvs_depth_consistency import check_geometric_consistency
 def load_initial_images(image_dir):
     ## load images
     ## dict_keys(['img', 'true_shape', 'idx', 'instance', 'img_ori']),张量形式
@@ -92,7 +94,7 @@ def save_pointcloud_with_normals(imgs, pts3d, msk, save_path, mask_pc, reduce_pc
             filtered_pcd,
         )
 
-
+    print(f"Dust3R将滤波后的点云保存在{save_path}")
 
 #     vertices = np.array(filtered_pcd.points)
 #     vertices = np.array(filtered_pcd.points)
@@ -275,7 +277,8 @@ class Dust3r:
         self.scene = scene
 
         pcd = [i.detach() for i in scene.get_pts3d(clip_thred=1)] # a list of points of size whc
-        depth = [i.detach() for i in scene.get_depthmaps()]
+        pcd_camera = [i.detach() for i in scene.get_pts3d_camera(clip_thred=1)] #在相机坐标系下的点集 就是像素坐标和深度
+        depth = [i.detach() for i in scene.get_depthmaps(raw=True)]
 
         black_bg_mask = [((image['img'][0][0]!=-1)&(image['img'][0][1]!=-1)&(image['img'][0][2]!=-1)).cuda() for image in images]
         # self.scene.min_conf_thr = float(self.scene.conf_trf(torch.tensor(self.opts.min_conf_thr)))
@@ -303,17 +306,66 @@ class Dust3r:
         self.pcd = pcd
         self.depth = depth
         self.imgs = imgs
+        self.mvs_filter_masks = []
+        self.masks_filtered_with_mvs = []
         
         self.conf_img = [(im_conf * (bgs*1)).cpu().detach().numpy() for im_conf,bgs in zip(scene.im_conf,bgs_mask)]
         self.H,self.W = imgs.shape[1],imgs.shape[2]
 
         self.resized2origin_size()
-        
-        
-    def resized2dust3r(self,img):
+        self.mvs_filter()
 
+
+    # def cameras_trans_for_mvs(self,camera):
+    #     current_R , current_t = camera.R,camera.T
+    #     current_ext_mat = np.eye(4)
+    #     current_ext_mat[:3,:3] = current_R
+    #     current_ext_mat[:3,3] = current_t
+    #     return current_ext_mat # C2W
         
-        return img
+    def mvs_filter(self):
+        
+        all_ref_idxs = []
+        for ii in range(len(self.imgs)):
+            range_num = 2
+            ref_tart = max(0, ii - range_num)
+            ref_end = min(len(self.imgs)-1, ii + range_num)
+            ref_idxs = list(range(ref_tart, ref_end + 1))
+            ref_idxs.remove(ii)
+            all_ref_idxs.append(ref_idxs)
+            dy_range = len(ref_idxs)
+
+        for ii in range(len(self.imgs)):
+            # current_camera = train_cameras[ii]
+            current_ext_mat = self.scene.colmap_pose[ii].cpu().detach().numpy()
+            current_focal = self.scene.colmap_focal[ii]
+            current_in_mat = np.eye(3)
+            current_in_mat[0][0] = current_in_mat[1][1] = current_focal
+            current_in_mat[0][2] = self.imgs[ii].shape[1]/2
+            current_in_mat[1][2] = self.imgs[ii].shape[0]/2
+            current_depth = self.depth[ii].cpu().detach().numpy()
+            ref_idxs = all_ref_idxs[ii]
+
+            geo_mask_sum = 0
+            
+            for ref_idx in ref_idxs:
+                ref_ext_mat = self.scene.colmap_pose[ref_idx].cpu().detach().numpy()
+                ref_focal = self.scene.colmap_focal[ref_idx]
+                ref_in_mat = np.eye(3)
+                ref_in_mat[0][0] = ref_in_mat[1][1] = ref_focal
+                ref_in_mat[0][2] = self.imgs[ii].shape[1]/2
+                ref_in_mat[1][2] = self.imgs[ii].shape[0]/2
+
+                ref_depth = self.depth[ref_idx].cpu().detach().numpy()
+
+                masks, masks_per,depth_reprojected, x2d_src, y2d_src = check_geometric_consistency(current_depth,current_in_mat,current_ext_mat,ref_depth,ref_in_mat,ref_ext_mat)
+                
+                geo_mask_sum += masks[140].astype(np.int32)
+            geo_mask = geo_mask_sum >= dy_range * 0.9
+            self.mvs_filter_masks.append(geo_mask)
+            self.masks_filtered_with_mvs.append(np.logical_and(self.masks_filtered[ii],geo_mask))
+            print(f"Dust3R 相机{ii} 过滤后还剩{np.mean(geo_mask)}的点")
+            print("ok")
 
     
     def resized2origin_size(self):
@@ -377,9 +429,9 @@ class Dust3r:
 
     def save_pointcloud_with_normals(self,filter = False,save_path = "test.ply",mask_pc = True,downsample_voxel = None):
         if filter:
-            save_pointcloud_with_normals(self.imgs, self.pcd, msk=self.masks_filtered, save_path=save_path, mask_pc=mask_pc, reduce_pc=False,downsample_voxel = downsample_voxel)
+            save_pointcloud_with_normals(self.imgs, self.pcd, msk=self.masks_filtered_with_mvs, save_path=save_path, mask_pc=mask_pc, reduce_pc=False,downsample_voxel = downsample_voxel)
         else:
-            save_pointcloud_with_normals(self.imgs, self.pcd, msk=self.masks, save_path=save_path, mask_pc=mask_pc, reduce_pc=False,downsample_voxel = downsample_voxel)
+            save_pointcloud_with_normals(self.imgs, self.pcd, msk=self.masks_filtered, save_path=save_path, mask_pc=mask_pc, reduce_pc=False,downsample_voxel = downsample_voxel)
     
     def save_pointcloud_with_gt(self,save_path = "test_withgt.ply",mask_pc = True):
         pc = get_pc(self.imgs, self.pcd, self.masks_filtered,mask_pc=mask_pc,reduce_pc=False) 

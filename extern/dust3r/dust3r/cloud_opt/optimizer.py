@@ -53,9 +53,10 @@ class PointCloudOptimizer(BasePCOptimizer):
 
                 beishu = weight / self.imshapes[0][1]
                 focal = focal_origin/beishu
-
-                self.preset_focal([focal,focal,focal])
-
+                focals = [focal for i in range(self.n_imgs)]
+                self.preset_focal(focals)
+                self.colmap_focal = focals
+            self.beishu = beishu
         
 
         self.im_pp = nn.ParameterList(torch.zeros((2,)) for _ in range(self.n_imgs))  # camera intrinsics
@@ -106,6 +107,7 @@ class PointCloudOptimizer(BasePCOptimizer):
                         # print(poses)
 
         poses_R = []
+        poses_colmap = []
         for pose in poses:
             q_x, q_y, q_z,q_w,t_x,t_y,t_z = pose
 
@@ -121,8 +123,9 @@ class PointCloudOptimizer(BasePCOptimizer):
             R[:3, 3] = t
 
             poses_R.append(R.inverse())
-
+            poses_colmap.append(R)
         self.preset_pose(poses_R)
+        self.colmap_pose = poses_colmap
         # 手动指定了位姿
         self.im_pp = ParameterStack(self.im_pp, is_param=True)
         self.register_buffer('_pp', torch.tensor([(w/2, h/2) for h, w in self.imshapes]))
@@ -252,6 +255,18 @@ class PointCloudOptimizer(BasePCOptimizer):
             res = torch.where(res > thred, thred, res)
         return res
 
+    def depth_to_pts3d_camera(self,clip_thred=None):
+        # Get depths and  projection params if not provided
+        focals = self.get_focals()
+        pp = self.get_principal_points()
+        im_poses = self.get_im_poses()
+        depth = self.get_depthmaps(raw=True,clip_thred = clip_thred)
+
+        # get pointmaps in camera frame
+        rel_ptmaps = _fast_depthmap_to_pts3d(depth, self._grid, focals, pp=pp)
+        # project to world frame
+        return rel_ptmaps
+    
     def depth_to_pts3d(self,clip_thred=None):
         # Get depths and  projection params if not provided
         focals = self.get_focals()
@@ -266,6 +281,13 @@ class PointCloudOptimizer(BasePCOptimizer):
 
     def get_pts3d(self, raw=False, clip_thred=None):
         res = self.depth_to_pts3d(clip_thred)
+        
+        if not raw:
+            res = [dm[:h*w].view(h, w, 3) for dm, (h, w) in zip(res, self.imshapes)]
+        return res
+    
+    def get_pts3d_camera(self, raw=False, clip_thred=None):
+        res = self.depth_to_pts3d_camera(clip_thred)
         
         if not raw:
             res = [dm[:h*w].view(h, w, 3) for dm, (h, w) in zip(res, self.imshapes)]
