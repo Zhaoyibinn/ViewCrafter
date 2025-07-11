@@ -85,9 +85,14 @@ def save_pointcloud_with_normals(imgs, pts3d, msk, save_path, mask_pc, reduce_pc
         )
 
         filtered_pcd = downsampled_pcd.select_by_index(ind)
-        print(f"Dust3R进行了滤波 voxel = {downsample_voxel} 点云个数从{np.array(pcd.points).shape[0]}变成了{np.array(downsampled_pcd.points).shape[0]}")
+        print(f"Dust3R进行了滤波和降采样 voxel = {downsample_voxel} 点云个数从{np.array(pcd.points).shape[0]}变成了{np.array(filtered_pcd.points).shape[0]}")
     else:
-        filtered_pcd = pcd
+        downsampled_pcd = pcd
+        _, ind = downsampled_pcd.remove_statistical_outlier(
+            nb_neighbors=20, std_ratio=2.0
+        )
+        filtered_pcd = downsampled_pcd.select_by_index(ind)
+        print(f"Dust3R进行了滤波  点云个数从{np.array(pcd.points).shape[0]}变成了{np.array(filtered_pcd.points).shape[0]}")
 
     o3d.io.write_point_cloud(
             save_path,
