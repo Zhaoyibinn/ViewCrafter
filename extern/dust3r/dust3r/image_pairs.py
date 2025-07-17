@@ -34,8 +34,12 @@ def make_pairs(imgs, scene_graph='complete', prefilter=None, symmetrize=True):
         assert len(imgs) % 2 == 0
         for i in range(0, len(imgs), 2):
             pairs.append((imgs[i], imgs[i+1]))
+    
+    elif scene_graph == 'pic2_pair':
+        assert len(imgs) == 2
+        pairs.append((imgs[0], imgs[1]))
 
-    if symmetrize:
+    if symmetrize and scene_graph != 'pic2_pair':
         pairs += [(img2, img1) for img1, img2 in pairs]
 
     # now, remove edges

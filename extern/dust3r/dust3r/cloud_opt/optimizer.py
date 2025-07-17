@@ -106,26 +106,26 @@ class PointCloudOptimizer(BasePCOptimizer):
                         poses[image_idx] = pose
                         # print(poses)
 
-        poses_R = []
-        poses_colmap = []
-        for pose in poses:
-            q_x, q_y, q_z,q_w,t_x,t_y,t_z = pose
+            poses_R = []
+            poses_colmap = []
+            for pose in poses:
+                q_x, q_y, q_z,q_w,t_x,t_y,t_z = pose
 
-            R = torch.eye(4)
-            R_3 = torch.tensor([
-                [1 - 2 * q_y ** 2 - 2 * q_z ** 2, 2 * (q_x * q_y - q_w * q_z), 2 * (q_x * q_z + q_w * q_y)],
-                [2 * (q_x * q_y + q_w * q_z), 1 - 2 * q_x ** 2 - 2 * q_z ** 2, 2 * (q_y * q_z - q_w * q_x)],
-                [2 * (q_x * q_z - q_w * q_y), 2 * (q_y * q_z + q_w * q_x), 1 - 2 * q_x ** 2 - 2 * q_y ** 2]
-                ])
-            t = torch.tensor([t_x,t_y,t_z])
+                R = torch.eye(4)
+                R_3 = torch.tensor([
+                    [1 - 2 * q_y ** 2 - 2 * q_z ** 2, 2 * (q_x * q_y - q_w * q_z), 2 * (q_x * q_z + q_w * q_y)],
+                    [2 * (q_x * q_y + q_w * q_z), 1 - 2 * q_x ** 2 - 2 * q_z ** 2, 2 * (q_y * q_z - q_w * q_x)],
+                    [2 * (q_x * q_z - q_w * q_y), 2 * (q_y * q_z + q_w * q_x), 1 - 2 * q_x ** 2 - 2 * q_y ** 2]
+                    ])
+                t = torch.tensor([t_x,t_y,t_z])
 
-            R[:3, :3] = R_3
-            R[:3, 3] = t
+                R[:3, :3] = R_3
+                R[:3, 3] = t
 
-            poses_R.append(R.inverse())
-            poses_colmap.append(R)
-        self.preset_pose(poses_R)
-        self.colmap_pose = poses_colmap
+                poses_R.append(R.inverse())
+                poses_colmap.append(R)
+            self.preset_pose(poses_R)
+            self.colmap_pose = poses_colmap
         # 手动指定了位姿
         self.im_pp = ParameterStack(self.im_pp, is_param=True)
         self.register_buffer('_pp', torch.tensor([(w/2, h/2) for h, w in self.imshapes]))

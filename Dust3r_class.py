@@ -328,6 +328,24 @@ class Dust3r:
     #     current_ext_mat[:3,3] = current_t
     #     return current_ext_mat # C2W
         
+    def run_only_model(self,imgs_list): 
+        images, img_ori = load_initial_images(image_dir=imgs_list)
+        pairs = make_pairs(images, scene_graph='pic2_pair', prefilter=None, symmetrize=True)
+        output = inference(pairs, self.dust3r_model, "cuda", batch_size=1)
+
+        point_cloud_np = output['pred1']['pts3d'].squeeze(0).reshape(-1, 3).cpu().numpy()
+
+        mode = GlobalAlignerMode.PointCloudOptimizer #if len(self.images) > 2 else GlobalAlignerMode.PairViewer
+        scene = global_aligner(output, device="cuda", mode=mode)
+        if mode == GlobalAlignerMode.PointCloudOptimizer:
+            loss = scene.compute_global_alignment(init='mst', niter=300, schedule='linear', lr=0.01)
+        # pcd = o3d.geometry.PointCloud()
+        # pcd.points = o3d.utility.Vector3dVector(point_cloud_np)
+        # downsampled_pcd = pcd.voxel_down_sample(voxel_size=0.002)
+        # print(f"降采样后点云点数: {len(downsampled_pcd.points)}")
+        # o3d.io.write_point_cloud("test.ply", downsampled_pcd)
+        return output,point_cloud_np,scene
+
     def mvs_filter(self):
         
         all_ref_idxs = []
