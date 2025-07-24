@@ -6,6 +6,7 @@ import numpy as np
 import torch
 import copy
 import trimesh
+import shutil
 
 import sys
 sys.path.append("extern/dust3r")
@@ -456,6 +457,19 @@ class Dust3r:
         else:
             save_pointcloud_with_normals(self.imgs, self.pcd, msk=self.masks_filtered, save_path=save_path, mask_pc=mask_pc, reduce_pc=False,downsample_voxel = downsample_voxel)
     
+    def save_dust3r_depth(self):
+        depth_save_dir = os.path.join(self.sparse_colmap_path_root.rsplit("/",2)[0],"depth_dust3r")
+        if os.path.exists(depth_save_dir):
+            # 如果存在则删除整个文件夹（包括里面的文件）
+            shutil.rmtree(depth_save_dir)
+        os.makedirs(depth_save_dir)
+        for idx,depth_resized_1 in enumerate(self.depth_resized):
+            img_path = self.img_path_list[idx]
+            img_name = img_path.rsplit('/',1)[-1].split('.')[0]
+            cv2.imwrite(f"{depth_save_dir}/{img_name}.tiff",depth_resized_1)
+        
+        pass
+
     def save_pointcloud_with_gt(self,save_path = "test_withgt.ply",mask_pc = True):
         pc = get_pc(self.imgs, self.pcd, self.masks_filtered,mask_pc=mask_pc,reduce_pc=False) 
         vertices = pc.vertices
